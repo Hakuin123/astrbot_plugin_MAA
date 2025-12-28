@@ -61,6 +61,7 @@ class MAAPlugin(Star):
         self.http_host: str = config.get("http_host", "0.0.0.0")
         self.http_port: int = config.get("http_port", 2828)
         self.auto_screenshot: bool = config.get("auto_screenshot", True)
+        self.notify_on_each_task: bool = config.get("notify_on_each_task", False)
 
         # 数据存储
         self.data_dir = Path("data/astrbot_plugin_maa")
@@ -76,6 +77,8 @@ class MAAPlugin(Star):
         self.executed_tasks: Dict[str, Set[str]] = {}
         # 设备最后活跃时间: {device_id: timestamp}
         self.device_last_seen: Dict[str, float] = {}
+        # 任务信息映射: {task_id: {"name": str, "type": str, "device_id": str}}
+        self.task_info: Dict[str, dict] = {}
 
         # HTTP 服务器相关
         self.app: Optional[web.Application] = None
@@ -181,6 +184,11 @@ class MAAPlugin(Star):
         if not device_id or not task_id:
             return web.Response(status=400)
 
+        # 获取任务信息
+        task_info = self.task_info.get(task_id, {})
+        task_name = task_info.get("name", "未知任务")
+        task_type = task_info.get("type", "")
+
         # 标记任务已执行
         if device_id not in self.executed_tasks:
             self.executed_tasks[device_id] = set()
@@ -192,25 +200,55 @@ class MAAPlugin(Star):
                 t for t in self.task_queues[device_id] if t["id"] != task_id
             ]
 
+        # 清理已完成的任务信息
+        if task_id in self.task_info:
+            del self.task_info[task_id]
+
+        # 计算剩余用户任务数（排除系统任务如截图、心跳等）
+        system_task_types = {"CaptureImage", "CaptureImageNow", "HeartBeat", "StopTask"}
+        remaining_user_tasks = len([
+            t for t in self.task_queues.get(device_id, [])
+            if t.get("type") not in system_task_types
+        ])
+
+        # 判断是否应该发送通知
+        is_system_task = task_type in system_task_types
+        # 非系统任务时：每任务通知模式直接通知，否则仅当所有任务完成才通知
+        should_notify = not is_system_task and (
+            self.notify_on_each_task or remaining_user_tasks == 0
+        )
+
         # 查找对应用户并发送通知
         sender_id = self.device_to_sender.get(device_id)
         if sender_id and sender_id in self.bindings:
             binding = self.bindings[sender_id]
             if umo := binding.get("umo"):
-                # 发送任务完成通知
-                message = f"✅ MAA 任务完成\n状态: {status}"
+                # 构建通知消息
+                if should_notify:
+                    if self.notify_on_each_task:
+                        message = f"✅ MAA 任务完成：{task_name}\n状态: {status}"
+                        if remaining_user_tasks > 0:
+                            message += f"\n剩余任务: {remaining_user_tasks} 个"
+                    else:
+                        message = f"✅ MAA 所有任务已完成\n最后完成: {task_name}\n状态: {status}"
 
-                # 如果有截图数据（Base64），发送图片
-                if payload and len(payload) > 100:  # 可能是截图
+                    # 如果有截图数据（Base64），发送图片
+                    if payload and len(payload) > 100:  # 可能是截图
+                        try:
+                            await self._send_screenshot(umo, payload, message)
+                        except Exception as e:
+                            logger.error(f"发送截图失败: {e}")
+                            chain = MessageChain().message(f"{message}\n(截图发送失败: {e})")
+                            await self.context.send_message(umo, chain)
+                    else:
+                        chain = MessageChain().message(message)
+                        await self.context.send_message(umo, chain)
+                elif payload and len(payload) > 100:
+                    # 截图任务：仅发送截图，不发送通知文本
                     try:
-                        await self._send_screenshot(umo, payload, message)
+                        await self._send_screenshot(umo, payload, "")
                     except Exception as e:
                         logger.error(f"发送截图失败: {e}")
-                        chain = MessageChain().message(f"{message}\n(截图发送失败: {e})")
-                        await self.context.send_message(umo, chain)
-                else:
-                    chain = MessageChain().message(message)
-                    await self.context.send_message(umo, chain)
 
         return web.Response(status=200)
 
@@ -243,8 +281,15 @@ class MAAPlugin(Star):
         except Exception as e:
             logger.debug(f"删除临时文件失败: {e}")
 
-    def _add_task(self, device_id: str, task_type: str, params: str = "") -> str:
-        """添加任务到队列，返回任务 ID"""
+    def _add_task(self, device_id: str, task_type: str, task_name: str = "", params: str = "") -> str:
+        """添加任务到队列，返回任务 ID
+        
+        Args:
+            device_id: 设备 ID
+            task_type: 任务类型
+            task_name: 任务名称（用于通知显示）
+            params: 任务参数
+        """
         task_id = str(uuid.uuid4())
         task = {"id": task_id, "type": task_type}
         if params:
@@ -255,10 +300,23 @@ class MAAPlugin(Star):
 
         self.task_queues[device_id].append(task)
 
+        # 存储任务信息以便完成时获取任务名
+        self.task_info[task_id] = {
+            "name": task_name or task_type,
+            "type": task_type,
+            "device_id": device_id
+        }
+
         # 如果开启自动截图，追加截图任务
         if self.auto_screenshot and task_type not in ("CaptureImage", "CaptureImageNow", "HeartBeat"):
-            screenshot_task = {"id": str(uuid.uuid4()), "type": "CaptureImage"}
+            screenshot_task_id = str(uuid.uuid4())
+            screenshot_task = {"id": screenshot_task_id, "type": "CaptureImage"}
             self.task_queues[device_id].append(screenshot_task)
+            self.task_info[screenshot_task_id] = {
+                "name": "自动截图",
+                "type": "CaptureImage",
+                "device_id": device_id
+            }
 
         return task_id
 
@@ -423,7 +481,7 @@ class MAAPlugin(Star):
         # 添加任务到队列
         added_tasks = []
         for name, task_type in task_types:
-            task_id = self._add_task(device_id, task_type)
+            task_id = self._add_task(device_id, task_type, task_name=name)
             added_tasks.append(f"• {name} ({task_type})")
 
         yield event.plain_result(
