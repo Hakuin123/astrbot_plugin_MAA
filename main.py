@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import os
+import time
 import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, Set
@@ -10,7 +11,7 @@ from aiohttp import web
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star, StarTools, register
 import astrbot.api.message_components as Comp
 
 
@@ -63,8 +64,8 @@ class MAAPlugin(Star):
         self.auto_screenshot: bool = config.get("auto_screenshot", True)
         self.notify_on_each_task: bool = config.get("notify_on_each_task", False)
 
-        # 数据存储
-        self.data_dir = Path("data/astrbot_plugin_maa")
+        # 数据存储 (使用 StarTools.get_data_dir 获取规范路径)
+        self.data_dir = StarTools.get_data_dir("astrbot_plugin_maa")
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
         # 设备绑定: {sender_id: {"device_id": str, "user_id": str, "umo": str}}
@@ -150,7 +151,6 @@ class MAAPlugin(Star):
             return web.json_response({"tasks": []}, status=400)
 
         # 更新设备最后活跃时间
-        import time
         self.device_last_seen[device_id] = time.time()
 
         # 检查是否是已绑定的设备
@@ -404,7 +404,6 @@ class MAAPlugin(Star):
         device_id = binding["device_id"]
 
         # 检查设备在线状态
-        import time
         last_seen = self.device_last_seen.get(device_id, 0)
         now = time.time()
         if last_seen > 0:
