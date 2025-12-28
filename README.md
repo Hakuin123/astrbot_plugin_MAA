@@ -2,6 +2,8 @@
 
 通过 AstrBot 远程控制 [MAA Assistant Arknights](https://maa.plus/)（一款明日方舟游戏小助手）
 
+![Moe Counter](https://count.getloli.com/@astrbot_plugin_maa?name=astrbot_plugin_maa&theme=capoo-2&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
+
 ## 特性
 
 -   **远程控制**: 支持通过 QQ 等消息平台远程启动 MAA 任务
@@ -103,3 +105,9 @@
 ## 开源协议
 
 [AGPL-3.0](LICENSE)
+
+## 参考资料
+
+- [MAA Assistant Arknights](https://maa.plus/)
+- [远程控制协议 | MAA 文档站](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html)
+- [AstrBot 插件模板](https://github.com/Soulter/helloworld)
