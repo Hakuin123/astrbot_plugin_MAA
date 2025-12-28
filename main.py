@@ -48,7 +48,7 @@ TASK_ALIASES = {
     "Hakuin123",
     "通过 AstrBot 远程控制 MAA",
     "1.0.0",
-    "https://github.com/Hakuin123/astrbot_plugin_MAA",
+    "https://github.com/Hakuin123/astrbot_plugin_maa",
 )
 class MAAPlugin(Star):
     """MAA 远程控制插件"""
