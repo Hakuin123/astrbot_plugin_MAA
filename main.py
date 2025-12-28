@@ -108,12 +108,17 @@ class MAAPlugin(Star):
         except Exception as e:
             logger.error(f"保存绑定数据失败: {e}")
 
+    @filter.on_astrbot_loaded()
     async def initialize(self):
         """插件初始化，启动 HTTP 服务器"""
         await self._start_http_server()
 
     async def _start_http_server(self):
         """启动 HTTP 服务器"""
+        if self.runner:
+            logger.warning("MAA HTTP 服务已在运行中，跳过启动")
+            return
+
         self.app = web.Application()
         self.app.router.add_post("/maa/getTask", self._handle_get_task)
         self.app.router.add_post("/maa/reportStatus", self._handle_report_status)
@@ -493,8 +498,29 @@ class MAAPlugin(Star):
 
     async def terminate(self):
         """插件销毁，停止 HTTP 服务器"""
-        if self.site:
-            await self.site.stop()
-        if self.runner:
-            await self.runner.cleanup()
-        logger.info("MAA HTTP 服务已停止")
+        logger.info(f"正在停止 MAA HTTP 服务 (端口: {self.http_port})...")
+        try:
+            # 使用 asyncio.wait_for 以确保停止操作不会永久挂起
+            async def perform_cleanup():
+                if self.site:
+                    await self.site.stop()
+                    logger.debug("MAA HTTP Site 已停止")
+                if self.runner:
+                    await self.runner.cleanup()
+                    logger.debug("MAA HTTP Runner 已清理")
+                if self.app:
+                    await self.app.shutdown()
+                    await self.app.cleanup()
+                    logger.debug("MAA HTTP App 已关闭")
+
+            await asyncio.wait_for(perform_cleanup(), timeout=10.0)
+            logger.info("MAA HTTP 服务停止成功")
+        except asyncio.TimeoutError:
+            logger.error("停止 MAA HTTP 服务超时")
+        except Exception as e:
+            logger.error(f"停止 MAA HTTP 服务时发生错误: {e}")
+        finally:
+            self.site = None
+            self.runner = None
+            self.app = None
+            logger.info("MAA 插件已销毁")
