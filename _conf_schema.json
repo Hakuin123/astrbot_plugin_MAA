@@ -1,0 +1,20 @@
+{
+  "http_host": {
+    "type": "string",
+    "default": "0.0.0.0",
+    "description": "HTTP 服务监听地址",
+    "hint": "MAA 将通过此地址连接插件"
+  },
+  "http_port": {
+    "type": "int",
+    "default": 2828,
+    "description": "HTTP 服务端口",
+    "hint": "确保端口未被占用，MAA 需要配置相同端口"
+  },
+  "auto_screenshot": {
+    "type": "bool",
+    "default": true,
+    "description": "任务完成后自动截图",
+    "hint": "开启后每次任务完成时会自动附加一个截图任务"
+  }
+}
