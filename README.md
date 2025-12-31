@@ -55,6 +55,7 @@
 -   `/maa status`: 查看 MAA 设备在线状态及待执行任务
 -   `/maa screenshot` (或 `/maa ss`): 立即获取当前模拟器截图
 -   `/maa stop`: 停止当前正在执行的任务
+-   `/maa clear`: 清空待执行的任务队列
 -   `/maa heartbeat`: 发送心跳检测
 
 ### 执行任务

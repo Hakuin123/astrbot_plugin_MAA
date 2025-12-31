@@ -560,6 +560,37 @@ class MAAPlugin(Star):
 
         yield event.plain_result("心跳检测已发送，等待 MAA 返回当前任务状态")
 
+    @maa.command("clear")
+    async def maa_clear(self, event: AstrMessageEvent):
+        """清空任务列表"""
+        sender_id = event.get_sender_id()
+
+        if sender_id not in self.bindings:
+            yield event.plain_result("❌ 错误：请先绑定设备: /maa bind <设备ID>")
+            return
+
+        device_id = self.bindings[sender_id]["device_id"]
+
+        # 统计待清理的任务数
+        pending_count = len(self.task_queues.get(device_id, []))
+
+        if pending_count == 0:
+            yield event.plain_result("ℹ️ 任务队列为空")
+            return
+
+        # 清空任务队列
+        self.task_queues[device_id] = []
+
+        # 清理对应的任务信息
+        task_ids_to_remove = [
+            task_id for task_id, info in self.task_info.items()
+            if info.get("device_id") == device_id
+        ]
+        for task_id in task_ids_to_remove:
+            del self.task_info[task_id]
+
+        yield event.plain_result(f"🗑️ 已清空任务队列，共移除 {pending_count} 个待执行任务")
+
     async def terminate(self):
         """插件销毁，停止 HTTP 服务器"""
         logger.info(f"正在停止 MAA HTTP 服务 (端口: {self.http_port})...")
