@@ -513,6 +513,13 @@ class MAAPlugin(Star):
             self.task_queues[device_id] = []
         self.task_queues[device_id].insert(0, task)  # 插入队首
 
+        # 存储任务信息，以便 _handle_report_status 正确识别任务类型
+        self.task_info[task_id] = {
+            "name": "截图",
+            "type": "CaptureImageNow",
+            "device_id": device_id
+        }
+
         yield event.plain_result("截图任务已添加，等待 MAA 响应")
 
     @maa.command("stop")
